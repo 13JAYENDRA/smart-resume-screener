@@ -1,0 +1,18 @@
+JOHN DOE
+Email: john@email.com
+Phone: 1234567890
+
+SKILLS
+Python, Django, FastAPI, React, JavaScript
+PostgreSQL, MongoDB, AWS, Docker
+Team Leadership, Agile
+
+EXPERIENCE
+Senior Developer at Tech Corp
+2018 - Present
+- Led team of 5 developers
+- Built APIs with FastAPI
+- Deployed on AWS with Docker
+
+EDUCATION
+B.Tech Computer Science, 2018

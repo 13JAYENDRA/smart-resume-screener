@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Resume Screener</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .candidate-card {
+            transition: all 0.3s ease;
+        }
+        .candidate-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+        }
+        .score-badge {
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.8; }
+        }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-blue-50 to-indigo-100 min-h-screen">
+    <!-- Header -->
+    <header class="bg-white shadow-md">
+        <div class="container mx-auto px-6 py-4">
+            <h1 class="text-3xl font-bold text-indigo-600">🎯 Smart Resume Screener</h1>
+            <p class="text-gray-600">AI-Powered Candidate Matching System</p>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <div class="container mx-auto px-6 py-8">
+        <!-- Upload Section -->
+        <div class="bg-white rounded-lg shadow-lg p-6 mb-8">
+            <h2 class="text-2xl font-bold text-gray-800 mb-4">📄 Upload Resume</h2>
+            
+            <div class="mb-4">
+                <label class="block text-gray-700 font-semibold mb-2">Job Description</label>
+                <textarea 
+                    id="jobDescription" 
+                    class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                    rows="6"
+                    placeholder="Enter the job description here..."
+                ></textarea>
+            </div>
+
+            <div class="mb-4">
+                <label class="block text-gray-700 font-semibold mb-2">Upload Resume (PDF or TXT)</label>
+                <input 
+                    type="file" 
+                    id="resumeFile" 
+                    accept=".pdf,.txt"
+                    class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                >
+            </div>
+
+            <button 
+                onclick="uploadResume()"
+                class="w-full bg-indigo-600 text-white font-bold py-3 px-6 rounded-lg hover:bg-indigo-700 transition duration-300"
+            >
+                🚀 Process Resume
+            </button>
+
+            <div id="uploadStatus" class="mt-4"></div>
+        </div>
+
+        <!-- Filters -->
+        <div class="bg-white rounded-lg shadow-lg p-6 mb-8">
+            <div class="flex items-center justify-between">
+                <h2 class="text-2xl font-bold text-gray-800">📊 Candidates</h2>
+                <div class="flex items-center space-x-4">
+                    <label class="text-gray-700 font-semibold">Min Score:</label>
+                    <select 
+                        id="minScoreFilter" 
+                        onchange="loadCandidates()"
+                        class="p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                    >
+                        <option value="0">All (0+)</option>
+                        <option value="5">Medium (5+)</option>
+                        <option value="7" selected>High (7+)</option>
+                        <option value="9">Excellent (9+)</option>
+                    </select>
+                    <button 
+                        onclick="loadCandidates()"
+                        class="bg-green-500 text-white px-4 py-2 rounded-lg hover:bg-green-600 transition"
+                    >
+                        🔄 Refresh
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Candidates Grid -->
+        <div id="candidatesContainer" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <!-- Candidates will be loaded here -->
+        </div>
+    </div>
+
+    <script>
+        const API_URL = 'http://localhost:8000';
+
+        // Upload Resume
+        async function uploadResume() {
+            const fileInput = document.getElementById('resumeFile');
+            const jobDescription = document.getElementById('jobDescription').value;
+            const statusDiv = document.getElementById('uploadStatus');
+
+            if (!fileInput.files.length) {
+                statusDiv.innerHTML = '<div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">Please select a resume file</div>';
+                return;
+            }
+
+            if (!jobDescription.trim()) {
+                statusDiv.innerHTML = '<div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">Please enter a job description</div>';
+                return;
+            }
+
+            statusDiv.innerHTML = '<div class="bg-blue-100 border border-blue-400 text-blue-700 px-4 py-3 rounded">Processing resume...</div>';
+
+            const formData = new FormData();
+            formData.append('file', fileInput.files[0]);
+            formData.append('job_description', jobDescription);
+
+            try {
+                const response = await fetch(`${API_URL}/upload-resume`, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    statusDiv.innerHTML = `
+                        <div class="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded">
+                            <strong>Success!</strong> Match Score: ${result.match_score}/10<br>
+                            ${result.justification}
+                        </div>
+                    `;
+                    
+                    // Clear form
+                    fileInput.value = '';
+                    
+                    // Reload candidates
+                    loadCandidates();
+                } else {
+                    throw new Error('Upload failed');
+                }
+            } catch (error) {
+                statusDiv.innerHTML = `<div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">Error: ${error.message}</div>`;
+            }
+        }
+
+        // Load Candidates
+        async function loadCandidates() {
+            const minScore = document.getElementById('minScoreFilter').value;
+            const container = document.getElementById('candidatesContainer');
+
+            container.innerHTML = '<div class="col-span-full text-center text-gray-500">Loading candidates...</div>';
+
+            try {
+                const response = await fetch(`${API_URL}/candidates?min_score=${minScore}`);
+                const data = await response.json();
+
+                if (data.candidates.length === 0) {
+                    container.innerHTML = '<div class="col-span-full text-center text-gray-500 py-12">No candidates found. Upload some resumes to get started!</div>';
+                    return;
+                }
+
+                container.innerHTML = data.candidates.map(candidate => `
+                    <div class="candidate-card bg-white rounded-lg shadow-lg p-6">
+                        <div class="flex justify-between items-start mb-4">
+                            <div>
+                                <h3 class="text-xl font-bold text-gray-800">${candidate.parsed_data.name}</h3>
+                                <p class="text-sm text-gray-600">${candidate.parsed_data.email}</p>
+                            </div>
+                            <div class="score-badge bg-${getScoreColor(candidate.match_score)}-500 text-white px-4 py-2 rounded-full font-bold text-lg">
+                                ${candidate.match_score}/10
+                            </div>
+                        </div>
+
+                        <div class="mb-4">
+                            <p class="text-sm text-gray-700"><strong>Phone:</strong> ${candidate.parsed_data.phone}</p>
+                            <p class="text-sm text-gray-700 mt-2"><strong>Skills:</strong></p>
+                            <div class="flex flex-wrap gap-2 mt-1">
+                                ${candidate.parsed_data.skills.slice(0, 5).map(skill => 
+                                    `<span class="bg-indigo-100 text-indigo-800 text-xs px-2 py-1 rounded">${skill}</span>`
+                                ).join('')}
+                                ${candidate.parsed_data.skills.length > 5 ? `<span class="text-xs text-gray-500">+${candidate.parsed_data.skills.length - 5} more</span>` : ''}
+                            </div>
+                        </div>
+
+                        <div class="mb-4">
+                            <p class="text-sm text-gray-700 font-semibold mb-2">Justification:</p>
+                            <p class="text-sm text-gray-600 italic">${candidate.justification}</p>
+                        </div>
+
+                        <div class="flex justify-between items-center">
+                            <button 
+                                onclick="viewDetails(${candidate.id})"
+                                class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 transition text-sm"
+                            >
+                                📋 View Details
+                            </button>
+                            <button 
+                                onclick="deleteCandidate(${candidate.id})"
+                                class="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600 transition text-sm"
+                            >
+                                🗑️ Delete
+                            </button>
+                        </div>
+                    </div>
+                `).join('');
+
+            } catch (error) {
+                container.innerHTML = `<div class="col-span-full text-center text-red-500">Error loading candidates: ${error.message}</div>`;
+            }
+        }
+
+        // Get score color
+        function getScoreColor(score) {
+            if (score >= 8) return 'green';
+            if (score >= 6) return 'yellow';
+            if (score >= 4) return 'orange';
+            return 'red';
+        }
+
+        // View candidate details
+        async function viewDetails(candidateId) {
+            try {
+                const response = await fetch(`${API_URL}/candidate/${candidateId}`);
+                const candidate = await response.json();
+
+                const modal = document.createElement('div');
+                modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4';
+                modal.innerHTML = `
+                    <div class="bg-white rounded-lg shadow-2xl max-w-4xl w-full max-h-screen overflow-y-auto p-8">
+                        <div class="flex justify-between items-start mb-6">
+                            <h2 class="text-3xl font-bold text-gray-800">Candidate Details</h2>
+                            <button onclick="this.closest('.fixed').remove()" class="text-gray-500 hover:text-gray-700 text-3xl">&times;</button>
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-6 mb-6">
+                            <div>
+                                <p class="text-sm text-gray-600 font-semibold">Name</p>
+                                <p class="text-lg">${candidate.parsed_data.name}</p>
+                            </div>
+                            <div>
+                                <p class="text-sm text-gray-600 font-semibold">Match Score</p>
+                                <p class="text-lg font-bold text-${getScoreColor(candidate.match_score)}-600">${candidate.match_score}/10</p>
+                            </div>
+                            <div>
+                                <p class="text-sm text-gray-600 font-semibold">Email</p>
+                                <p class="text-lg">${candidate.parsed_data.email}</p>
+                            </div>
+                            <div>
+                                <p class="text-sm text-gray-600 font-semibold">Phone</p>
+                                <p class="text-lg">${candidate.parsed_data.phone}</p>
+                            </div>
+                        </div>
+
+                        <div class="mb-6">
+                            <p class="text-sm text-gray-600 font-semibold mb-2">Skills</p>
+                            <div class="flex flex-wrap gap-2">
+                                ${candidate.parsed_data.skills.map(skill => 
+                                    `<span class="bg-indigo-100 text-indigo-800 px-3 py-1 rounded">${skill}</span>`
+                                ).join('')}
+                            </div>
+                        </div>
+
+                        <div class="mb-6">
+                            <p class="text-sm text-gray-600 font-semibold mb-2">Experience</p>
+                            <div class="space-y-3">
+                                ${candidate.parsed_data.experience.map(exp => 
+                                    `<div class="border-l-4 border-indigo-500 pl-4">
+                                        <p class="font-semibold">${exp.period}</p>
+                                        <p class="text-sm text-gray-700">${exp.details}</p>
+                                    </div>`
+                                ).join('')}
+                            </div>
+                        </div>
+
+                        <div class="mb-6">
+                            <p class="text-sm text-gray-600 font-semibold mb-2">Education</p>
+                            <div class="space-y-2">
+                                ${candidate.parsed_data.education.map(edu => 
+                                    `<div class="bg-gray-50 p-3 rounded">
+                                        <p class="font-semibold">${edu.degree}</p>
+                                        <p class="text-sm text-gray-600">Year: ${edu.year}</p>
+                                    </div>`
+                                ).join('')}
+                            </div>
+                        </div>
+
+                        <div class="mb-6">
+                            <p class="text-sm text-gray-600 font-semibold mb-2">AI Justification</p>
+                            <div class="bg-blue-50 p-4 rounded border-l-4 border-blue-500">
+                                <p class="text-gray-700">${candidate.justification}</p>
+                            </div>
+                        </div>
+
+                        <div class="mb-6">
+                            <p class="text-sm text-gray-600 font-semibold mb-2">Job Description</p>
+                            <div class="bg-gray-50 p-4 rounded text-sm text-gray-700 max-h-40 overflow-y-auto">
+                                ${candidate.job_description}
+                            </div>
+                        </div>
+
+                        <button 
+                            onclick="this.closest('.fixed').remove()"
+                            class="w-full bg-indigo-600 text-white py-3 rounded-lg hover:bg-indigo-700 transition font-semibold"
+                        >
+                            Close
+                        </button>
+                    </div>
+                `;
+                document.body.appendChild(modal);
+            } catch (error) {
+                alert('Error loading candidate details: ' + error.message);
+            }
+        }
+
+        // Delete candidate
+        async function deleteCandidate(candidateId) {
+            if (!confirm('Are you sure you want to delete this candidate?')) return;
+
+            try {
+                await fetch(`${API_URL}/candidate/${candidateId}`, {
+                    method: 'DELETE'
+                });
+                loadCandidates();
+            } catch (error) {
+                alert('Error deleting candidate: ' + error.message);
+            }
+        }
+
+        // Load candidates on page load
+        loadCandidates();
+    </script>
+</body>
+</html>
